@@ -1,0 +1,325 @@
+# MACHINE LEARNING CODE -----------------
+
+from flask import Flask, request, render_template
+import requests
+import joblib
+import numpy as np
+
+app = Flask(__name__)
+
+# Load ML model for drug rating prediction
+model = joblib.load("rating_model.pkl")
+
+# Map pregnancy categories to numerical values
+preg_map = {'A':1, 'B':2, 'C':3, 'D':4, 'X':5}
+
+def extract_side_effects(info):
+    """Extract side effects from multiple FDA fields and format them"""
+    # Combine all possible side effect sources
+    sources = [info.get(field) for field in [
+        "adverse_reactions", "warnings", "precautions", 
+        "boxed_warning", "contraindications", "general_precautions"]]
+    
+    # Clean and split into readable chunks
+    text = " ".join(str(s) for s in sources if s)
+    return [text[i:i+200] for i in range(0, len(text), 200)] if text else ["No side effects data"]
+
+def get_drug_alternatives(drug_name):
+    """Find alternative drugs using RxNorm API"""
+    try:
+        # Get RxNorm ID for the drug
+        rxcui = requests.get(
+            f"https://rxnav.nlm.nih.gov/REST/rxcui.json?name={drug_name}&search=1"
+        ).json().get('idGroup',{}).get('rxnormId',[None])[0]
+        
+        if not rxcui: return ["No alternatives found"]
+        
+        # Get related drugs (both ingredients and brand names)
+        concepts = requests.get(
+            f"https://rxnav.nlm.nih.gov/REST/rxcui/{rxcui}/related.json?tty=IN+BN"
+        ).json().get('relatedGroup',{}).get('conceptGroup',[])
+        
+        # Extract unique alternative names
+        alts = {p['name'] for g in concepts if g.get('conceptProperties') 
+               for p in g['conceptProperties'] if p.get('name') and p['name'].lower() != drug_name.lower()}
+        
+        return list(alts)[:5] or ["No alternatives found"]
+        
+    except Exception as e:
+        print(f"Alternative drugs error: {e}")
+        return ["Alternative search failed"]
+
+def predict_rating(side_effects, preg_cat):
+    """Predict drug rating using trained model"""
+    try:
+        rating = model.predict([[len(side_effects), preg_map.get(preg_cat,3)]])[0]
+        return {
+            'Predicted Rating': round(rating,1),
+            'Normal User Risk': 'Low' if rating>=8 else 'Moderate' if rating>=5 else 'High',
+            'Pregnant Woman Risk': {
+                'A':'Safe', 'B':'Likely Safe', 'C':'Caution',
+                'D':'Unsafe', 'X':'Contraindicated'}.get(preg_cat,'Unknown'),
+            'Pregnancy Category': preg_cat
+        }
+    except Exception as e:
+        print(f"Prediction error: {e}")
+        return None
+
+def get_drug_details(drug_name):
+    """Main function to get all drug data from FDA API"""
+    try:
+        # Get drug data from FDA
+        data = requests.get(
+            f"https://api.fda.gov/drug/label.json?search=openfda.generic_name:{drug_name}&limit=1",
+            timeout=10
+        ).json().get("results",[None])[0]
+        
+        if not data: return {"error": "Drug not found in FDA database"}
+        
+        # Process all data
+        side_effects = extract_side_effects(data)
+        preg_cat = data.get("pregnancy_category",["C"])[0] if isinstance(
+            data.get("pregnancy_category"),list) else data.get("pregnancy_category","C")
+        
+        return {
+            "prediction": predict_rating(side_effects, preg_cat),
+            "side_effects": side_effects,
+            "warnings": data.get("warnings",["No warnings"]),
+            "usage": data.get("indications_and_usage",["No usage info"]),
+            "brand_names": list(set(data.get("openfda",{}).get("brand_name",[drug_name]))),
+            "alternative": get_drug_alternatives(drug_name)
+        }
+        
+    except requests.exceptions.RequestException as e:
+        return {"error": f"FDA API error: {str(e)}"}
+    except Exception as e:
+        return {"error": f"Processing error: {str(e)}"}
+
+@app.route("/", methods=["GET","POST"])
+def index():
+    """Main Flask route handling requests"""
+    if request.method == "POST":
+        data = get_drug_details(request.form["drug_name"])
+        if "error" in data: 
+            return render_template("index.html", error=data["error"])
+        return render_template("index.html",
+            prediction=data["prediction"],
+            extra_info={
+                "Side Effects": data["side_effects"],
+                "Usage": data["usage"][0] if isinstance(data["usage"],list) else data["usage"],
+                "Warnings": data["warnings"][0] if isinstance(data["warnings"],list) else data["warnings"],
+                "Brand Names": ", ".join(data["brand_names"]),
+                "Alternative Drugs": data["alternative"],
+                "Pregnancy Category": data["prediction"]["Pregnancy Category"]
+            })
+    return render_template("index.html")
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
+
+
+
+# TRAINING CODE------------------- 
+
+
+import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error
+import joblib
+
+# 1. Load your dataset
+df = pd.read_csv(r"C:\Users\jaina\Downloads\drugs_side_effects_drugs_com.csv")
+
+# 2. Keep necessary columns
+df = df[['side_effects', 'rating', 'pregnancy_category']].dropna()
+
+# 3. Feature Engineering
+df['side_effects_count'] = df['side_effects'].apply(lambda x: len(str(x).split(',')))
+preg_map = {'A': 1, 'B': 2, 'C': 3, 'D': 4, 'X': 5}
+df['pregnancy_category_num'] = df['pregnancy_category'].map(preg_map)
+
+# 4. Features and target
+X = df[['side_effects_count', 'pregnancy_category_num']]
+y = df['rating']
+
+# 5. Split data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# 6. Train model
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+
+# 7. Evaluate
+preds = model.predict(X_test)
+rmse = np.sqrt(mean_squared_error(y_test, preds))
+print(f"Model RMSE: {rmse:.2f}")
+
+# 8. Save model
+joblib.dump(model, "rating_model.pkl")
+print("Model saved as rating_model.pkl")
+
+
+
+#HTML CODE-----
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Drug Predictor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Poppins', sans-serif;
+            background: url("/static/background.jpg") no-repeat center 30%;
+            background-size: cover;
+            background-attachment: fixed;
+            color: #fff;
+            text-align: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: rgba(0, 0, 0, 0.7);
+            width: 50%;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.5);
+            margin: 120px auto 50px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+
+        label {
+            font-size: 1.2rem;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        input[type="text"] {
+            width: 80%;
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            font-size: 1rem;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background-color: #ff9800;
+            color: #fff;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:hover {
+            background-color: #e68900;
+        }
+
+        .results {
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .results ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .results li {
+            margin-bottom: 8px;
+        }
+
+        .side-effects-box {
+            max-height: 150px;
+            overflow-y: auto;
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        .error {
+            color: #ff4d4d;
+            font-weight: bold;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                width: 90%;
+                padding: 20px;
+                margin: 80px auto 30px;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            input[type="text"] {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Drug Forecaster</h1>
+
+        <form method="POST">
+            <label for="drug_name">Enter Generic Drug Name:</label>
+            <input type="text" name="drug_name" id="drug_name" required>
+            <button type="submit">Predict</button>
+        </form>
+
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+
+        {% if prediction %}
+            <div class="results">
+                <h2>Prediction:</h2>
+                <ul>
+                    <li><strong>Predicted Rating:</strong> {{ prediction['Predicted Rating'] }}</li>
+                    <li><strong>Normal User Risk:</strong> {{ prediction['Normal User Risk'] }}</li>
+                    <li><strong>Pregnant Woman Risk:</strong> {{ prediction['Pregnant Woman Risk'] }}</li>
+                </ul>
+
+                {% if extra_info['Alternative Drugs'] %}
+                    <h2>Alternative Drugs:</h2>
+                    <ul>
+                        {% for alt in extra_info['Alternative Drugs'] %}
+                            <li>{{ alt }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+
+                {% if extra_info %}
+                    <h2>Additional Drug Info:</h2>
+                    <p><strong>Common Names:</strong> {{ extra_info['Brand Names'] }}</p>
+                    <p><strong>Possible Side Effects:</strong></p>
+                    <div class="side-effects-box">
+                        <ul>
+                            {% for effect in extra_info['Side Effects'] %}
+                                <li>{{ effect }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>
