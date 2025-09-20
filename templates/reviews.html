@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Reviews - Drug Forecaster</title>
+  <style>
+    a { text-decoration:none; padding:10px 15px; background:#007BFF; color:#fff; border-radius:5px; }
+    a:hover { background:#0056b3; }
+    button { background:#007BFF; color:#fff; padding:8px 12px; border:none; border-radius:5px; cursor:pointer; }
+    button:hover { background:#0056b3; }
+  </style>
+</head>
+<body>
+  <a href="{{ url_for('index') }}">Home</a>
+  <h1>User Reviews</h1>
+
+  <form method="POST">
+    <input type="text" name="name" placeholder="Your name" required>
+    <br><br>
+    <textarea name="text" placeholder="Write your review..." required></textarea>
+    <br><br>
+    <button type="submit">Submit Review</button>
+  </form>
+
+  <h3>All Reviews:</h3>
+  <ul>
+    {% for r in reviews %}
+      <li><b>{{ r.name }}</b>: {{ r.text }}</li>
+    {% endfor %}
+  </ul>
+</body>
+</html>

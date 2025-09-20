@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Drug Predictor</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Poppins', sans-serif;
+            background: url("/static/background.jpg") no-repeat center 30%;
+            background-size: cover;
+            background-attachment: fixed;
+            color: #fff;
+            text-align: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background: rgba(0, 0, 0, 0.7);
+            width: 50%;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0px 4px 20px rgba(0, 0, 0, 0.5);
+            margin: 120px auto 50px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+
+        label {
+            font-size: 1.2rem;
+            display: block;
+            margin-bottom: 10px;
+        }
+
+        input[type="text"] {
+            width: 80%;
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            font-size: 1rem;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background-color: #ff9800;
+            color: #fff;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 1rem;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 5px;
+        }
+
+        button:hover {
+            background-color: #e68900;
+        }
+
+        .buy-button {
+            background-color: #4CAF50;
+        }
+
+        .buy-button:hover {
+            background-color: #45a049;
+        }
+
+        .results {
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .results ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .results li {
+            margin-bottom: 8px;
+        }
+
+        .side-effects-box {
+            max-height: 150px;
+            overflow-y: auto;
+            background: rgba(255,255,255,0.1);
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+        }
+
+        .drug-image {
+            max-width: 250px;
+            max-height: 250px;
+            border-radius: 8px;
+            margin: 15px 0;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            object-fit: cover;
+        }
+
+        .price-comparison {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .pharmacy-item {
+            background: rgba(255,255,255,0.2);
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .pharmacy-info {
+            flex: 1;
+        }
+
+        .pharmacy-name {
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .pharmacy-price {
+            color: #4CAF50;
+            font-size: 1.3em;
+            font-weight: bold;
+            margin: 5px 0;
+        }
+
+        .pharmacy-availability {
+            font-size: 0.9em;
+            color: #ccc;
+        }
+
+        .pharmacy-link {
+            color: #4CAF50;
+            text-decoration: none;
+            font-weight: bold;
+            padding: 8px 15px;
+            border: 2px solid #4CAF50;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+
+        .pharmacy-link:hover {
+            background-color: #4CAF50;
+            color: white;
+        }
+
+        .loading {
+            color: #ff9800;
+            font-style: italic;
+        }
+
+        .error {
+            color: #ff4d4d;
+            font-weight: bold;
+        }
+
+        .image-placeholder {
+            width: 250px;
+            height: 200px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 15px auto;
+            color: #ccc;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                width: 90%;
+                padding: 20px;
+                margin: 80px auto 30px;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            input[type="text"] {
+                width: 100%;
+            }
+
+            .pharmacy-item {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .pharmacy-info {
+                margin-bottom: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Drug Forecaster</h1>
+
+        <form method="POST">
+            <label for="drug_name">Enter Generic Drug Name:</label>
+            <input type="text" name="drug_name" id="drug_name" required>
+            <button type="submit">Predict</button>
+        </form>
+
+        {% if error %}
+            <p class="error">{{ error }}</p>
+        {% endif %}
+
+        {% if prediction %}
+            <div class="results">
+                <div style="text-align: center;">
+                    {% if image_url %}
+                        <img src="{{ image_url }}" alt="Drug Image" class="drug-image" 
+                             onerror="this.style.display='none'; document.getElementById('imagePlaceholder').style.display='flex';">
+                        <div id="imagePlaceholder" class="image-placeholder" style="display: none;">
+                            <span>Drug Image Not Available</span>
+                        </div>
+                    {% else %}
+                        <div class="image-placeholder">
+                            <span>Drug Image Not Available</span>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <h2>Prediction:</h2>
+                <ul>
+                    <li><strong>Predicted Rating:</strong> {{ prediction['Predicted Rating'] }}</li>
+                    <li><strong>Normal User Risk:</strong> {{ prediction['Normal User Risk'] }}</li>
+                    <li><strong>Pregnant Woman Risk:</strong> {{ prediction['Pregnant Woman Risk'] }}</li>
+                </ul>
+
+                {% if prices %}
+                    <div style="text-align: center; margin: 20px 0;">
+                        <button class="buy-button" onclick="togglePrices()">Buy Now - Real-Time Price Comparison</button>
+                    </div>
+
+                    <div id="priceComparison" class="price-comparison">
+                        <h3>Current Prices at Indian Pharmacies:</h3>
+                        {% for pharmacy in prices %}
+                            <div class="pharmacy-item">
+                                <div class="pharmacy-info">
+                                    <div class="pharmacy-name">{{ pharmacy.name }}</div>
+                                    <div class="pharmacy-price">{{ pharmacy.price }}</div>
+                                    <div class="pharmacy-availability">{{ pharmacy.availability }}</div>
+                                </div>
+                                <div>
+                                    <a href="{{ pharmacy.url }}" target="_blank" class="pharmacy-link">Visit Store</a>
+                                </div>
+                            </div>
+                        {% endfor %}
+                        <p style="font-size: 0.9em; color: #ccc; margin-top: 15px;">
+                            *Prices are fetched in real-time and may vary based on dosage, brand, and availability. 
+                            Please verify on the respective websites before purchasing.
+                        </p>
+                    </div>
+                {% endif %}
+
+                {% if extra_info['Alternative Drugs'] %}
+                    <h2>Alternative Drugs:</h2>
+                    <ul>
+                        {% for alt in extra_info['Alternative Drugs'] %}
+                            <li>{{ alt }}</li>
+                        {% endfor %}
+                    </ul>
+                {% endif %}
+
+                {% if extra_info %}
+                    <h2>Additional Drug Info:</h2>
+                    <p><strong>Common Names:</strong> {{ extra_info['Brand Names'] }}</p>
+                    <p><strong>Possible Side Effects:</strong></p>
+                    <div class="side-effects-box">
+                        <ul>
+                            {% for effect in extra_info['Side Effects'] %}
+                                <li>{{ effect }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        function togglePrices() {
+            var priceDiv = document.getElementById('priceComparison');
+            if (priceDiv.style.display === 'none' || priceDiv.style.display === '') {
+                priceDiv.style.display = 'block';
+            } else {
+                priceDiv.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
