@@ -7,6 +7,8 @@ Can we accurately predict the effectiveness and rating of a drug using real-worl
 
 [📥 Download Drug Forecaster Video](Drug%20ForecasterVideo.mp4)
 
+📥 The video is too large to play directly on GitHub.  
+You can download it by clicking the **Download** button on the top-right of this file.
 
 🧬 FDA Integration
 The model fetches real-time data from the official FDA (Food & Drug Administration) database using the requests library.
