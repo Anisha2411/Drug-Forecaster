@@ -5,7 +5,7 @@ Can we accurately predict the effectiveness and rating of a drug using real-worl
 
 🧪 How I Built It<img width="1365" height="720" alt="Screenshot 2025-08-03 073146" src="https://github.com/user-attachments/assets/60d3c281-b707-4a30-b7a6-78c3e266409d" />
 
-[📥 Download DrugForecaster Video](DrugForecasterVideo.mp4)
+[📥 Download Drug Forecaster Video](Drug%20ForecasterVideo.mp4)
 
 
 🧬 FDA Integration
